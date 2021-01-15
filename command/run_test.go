@@ -10,14 +10,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/avenga/couper/config/env"
-
 	"github.com/rs/xid"
-
 	logrustest "github.com/sirupsen/logrus/hooks/test"
 
 	"github.com/avenga/couper/config"
 	"github.com/avenga/couper/config/configload"
+	"github.com/avenga/couper/config/env"
 	"github.com/avenga/couper/internal/test"
 )
 
