@@ -25,7 +25,6 @@ func NewRun(ctx context.Context) *Run {
 }
 
 func (r Run) Execute(args Args, config *config.CouperFile, logEntry *logrus.Entry) error {
-	// TODO: Extract and execute flagSet & env handling in a more generic way for future commands.
 	set := flag.NewFlagSet("settings", flag.ContinueOnError)
 	set.StringVar(&config.Settings.HealthPath, "health-path", config.Settings.HealthPath, "-health-path /healthz")
 	set.IntVar(&config.Settings.DefaultPort, "p", config.Settings.DefaultPort, "-p 8080")
