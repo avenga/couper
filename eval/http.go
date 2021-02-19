@@ -30,14 +30,14 @@ const (
 	attrDelResHeaders = "remove_response_headers"
 )
 
-func ApplyRequestContext(ctx *hcl.EvalContext, body hcl.Body, req *http.Request) error {
+func ApplyRequestContext(ctx *HTTP, body hcl.Body, req *http.Request) error {
 	if req == nil {
 		return nil
 	}
 
 	// TODO: bufferOpts from parent
 	opts := BufferRequest
-	httpCtx := NewHTTPContext(ctx, opts, req)
+	httpCtx := ctx.HTTPContext(opts, req)
 
 	content, _, _ := body.PartialContent(meta.AttributesSchema)
 
@@ -138,14 +138,14 @@ func evalURLPath(req *http.Request, attrs map[string]*hcl.Attribute, httpCtx *hc
 	}
 }
 
-func ApplyResponseContext(ctx *hcl.EvalContext, body hcl.Body, req *http.Request, beresp *http.Response) error {
+func ApplyResponseContext(ctx *HTTP, body hcl.Body, req *http.Request, beresp *http.Response) error {
 	if beresp == nil {
 		return nil
 	}
 
 	// TODO: bufferOpts from parent
 	opts := BufferResponse
-	httpCtx := NewHTTPContext(ctx, opts, req, beresp)
+	httpCtx := ctx.HTTPContext(opts, req, beresp)
 
 	content, _, _ := body.PartialContent(meta.AttributesSchema)
 

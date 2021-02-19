@@ -26,7 +26,7 @@ var _ http.Handler = &Endpoint{}
 const defaultReqBodyLimit = "64MiB"
 
 type Endpoint struct {
-	evalContext    *hcl.EvalContext
+	evalContext    *eval.HTTP
 	log            *logrus.Entry
 	logHandlerKind string
 	opts           *EndpointOptions
@@ -46,7 +46,7 @@ type EndpointOptions struct {
 	ServerOpts     *server.Options
 }
 
-func NewEndpoint(opts *EndpointOptions, evalCtx *hcl.EvalContext, log *logrus.Entry,
+func NewEndpoint(opts *EndpointOptions, evalCtx *eval.HTTP, log *logrus.Entry,
 	proxies producer.Proxies, requests producer.Requests, resp *producer.Response) *Endpoint {
 	opts.ReqBufferOpts |= eval.MustBuffer(opts.Context) // TODO: proper configuration on all hcl levels
 	return &Endpoint{
@@ -178,7 +178,7 @@ func (e *Endpoint) newResponse(req *http.Request, beresps map[string]*producer.R
 		Request:    req,
 	}
 
-	httpCtx := eval.NewHTTPContext(e.evalContext, e.opts.ReqBufferOpts, req, resps...)
+	httpCtx := e.evalContext.HTTPContext(e.opts.ReqBufferOpts, req, resps...)
 	content, _, diags := e.response.Context.PartialContent(config.ResponseInlineSchema)
 	if diags.HasErrors() {
 		return nil, diags

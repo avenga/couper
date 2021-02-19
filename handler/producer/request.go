@@ -26,7 +26,7 @@ type Request struct {
 // Requests represents the producer <Requests> object.
 type Requests []*Request
 
-func (r Requests) Produce(ctx context.Context, _ *http.Request, evalCtx *hcl.EvalContext, results chan<- *Result) {
+func (r Requests) Produce(ctx context.Context, _ *http.Request, evalCtx *eval.HTTP, results chan<- *Result) {
 	wg := &sync.WaitGroup{}
 	wg.Add(len(r))
 	go func() {

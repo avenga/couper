@@ -19,6 +19,7 @@ import (
 	"github.com/zclconf/go-cty/cty/function/stdlib"
 
 	ac "github.com/avenga/couper/accesscontrol"
+	"github.com/avenga/couper/config/jwt"
 	"github.com/avenga/couper/config/request"
 	"github.com/avenga/couper/eval/lib"
 	"github.com/avenga/couper/internal/seetie"
@@ -47,6 +48,26 @@ func NewENVContext(src []byte) *hcl.EvalContext {
 		Variables: variables,
 		Functions: newFunctionsMap(),
 	}
+}
+
+type HTTP struct {
+	base     *hcl.EvalContext
+	profiles []*jwt.JWTSigningProfile
+}
+
+func NewHTTP(base *hcl.EvalContext, profiles []*jwt.JWTSigningProfile) *HTTP {
+	b := base
+	if b == nil {
+		b = NewENVContext(nil)
+	}
+	return &HTTP{base: b, profiles: profiles}
+}
+
+func (h *HTTP) HTTPContext(bufOpt BufferOption, req *http.Request, beresps ...*http.Response) *hcl.EvalContext {
+	httpctx := NewHTTPContext(h.base, bufOpt, req, beresps...)
+	jwtfn := lib.NewJwtSignFunction(h.profiles, httpctx)
+	httpctx.Functions["jwt_sign"] = jwtfn
+	return httpctx
 }
 
 func NewHTTPContext(baseCtx *hcl.EvalContext, bufOpt BufferOption, req *http.Request, beresps ...*http.Response) *hcl.EvalContext {
@@ -89,6 +110,9 @@ func NewHTTPContext(baseCtx *hcl.EvalContext, bufOpt BufferOption, req *http.Req
 	resps := make(ContextMap, 0)
 	bereqs := make(ContextMap, 0)
 	for _, beresp := range beresps {
+		if beresp == nil {
+			continue
+		}
 		bereq := beresp.Request
 		name := BackendDefault // TODO: name related error handling? override previous one for now
 		if n, ok := bereq.Context().Value(request.RoundTripName).(string); ok {

@@ -28,7 +28,7 @@ func TestUnixtime(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cf, err := configload.LoadBytes([]byte(tt.hcl), "couper.hcl")
-			now, err := cf.Context.Functions["unixtime"].Call([]cty.Value{})
+			now, err := cf.Context.HTTPContext(0, nil).Functions["unixtime"].Call([]cty.Value{})
 			if err != nil {
 				t.Fatal(err)
 			}

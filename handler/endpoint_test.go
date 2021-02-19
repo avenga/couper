@@ -49,7 +49,7 @@ func TestEndpoint_RoundTrip_SetGetBody_LimitBody(t *testing.T) {
 			epHandler := handler.NewEndpoint(&handler.EndpointOptions{
 				Context:      helper.NewProxyContext("set_request_headers = { x = req.post }"),
 				ReqBodyLimit: bodyLimit,
-			}, eval.NewENVContext(nil), log, nil, nil, nil)
+			}, eval.NewHTTP(nil, nil), log, nil, nil, nil)
 
 			req := httptest.NewRequest(http.MethodPut, "/", bytes.NewBufferString(testcase.payload))
 			err := epHandler.SetGetBody(req)
@@ -106,7 +106,7 @@ func TestEndpoint_RoundTrip_Eval(t *testing.T) {
 		}},
 	}
 
-	evalCtx := eval.NewENVContext(nil)
+	evalCtx := eval.NewHTTP(nil, nil)
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(subT *testing.T) {
@@ -210,7 +210,7 @@ func TestEndpoint_RoundTripContext_Variables_json_body(t *testing.T) {
 			test.Header{"Content-Type": "application/json"}, "", want{req: test.Header{"x-test": ""}}},
 	}
 
-	evalCtx := eval.NewENVContext(nil)
+	evalCtx := eval.NewHTTP(nil, nil)
 
 	log, _ := logrustest.NewNullLogger()
 	logger := log.WithContext(context.Background())
@@ -282,7 +282,7 @@ func TestEndpoint_RoundTripContext_Null_Eval(t *testing.T) {
 		helper.Must(err)
 	}))
 
-	evalCtx := eval.NewENVContext(nil)
+	evalCtx := eval.NewHTTP(nil, nil)
 
 	log, _ := logrustest.NewNullLogger()
 	logger := log.WithContext(context.Background())

@@ -59,7 +59,7 @@ func TestBackend_RoundTrip_Timings(t *testing.T) {
 			hook.Reset()
 
 			tt.tconf.NoProxyFromEnv = true // use origin addr from transport.Config
-			backend := transport.NewBackend(eval.NewENVContext(nil), tt.context, tt.tconf, log, nil)
+			backend := transport.NewBackend(eval.NewHTTP(nil, nil), tt.context, tt.tconf, log, nil)
 
 			_, err := backend.RoundTrip(tt.req)
 			if err != nil && tt.expectedErr == "" {
@@ -95,7 +95,7 @@ func TestBackend_Compression_Disabled(t *testing.T) {
 			"origin": hcltest.MockExprLiteral(u),
 		}),
 	})
-	backend := transport.NewBackend(eval.NewENVContext(nil), hclBody, &transport.Config{}, log, nil)
+	backend := transport.NewBackend(eval.NewHTTP(nil, nil), hclBody, &transport.Config{}, log, nil)
 
 	req := httptest.NewRequest(http.MethodOptions, "http://1.2.3.4/", nil)
 	res, err := backend.RoundTrip(req)
@@ -136,7 +136,7 @@ func TestBackend_Compression_ModifyAcceptEncoding(t *testing.T) {
 		}),
 	})
 
-	backend := transport.NewBackend(eval.NewENVContext(nil), hclBody, &transport.Config{
+	backend := transport.NewBackend(eval.NewHTTP(nil, nil), hclBody, &transport.Config{
 		Origin: origin.URL,
 	}, log, nil)
 
@@ -236,7 +236,7 @@ func TestBackend_RoundTrip_Validation(t *testing.T) {
 				origin = "` + origin.URL + `"
 			`)
 
-			backend := transport.NewBackend(eval.NewENVContext(nil), content, &transport.Config{}, log, openapiValidatorOptions)
+			backend := transport.NewBackend(eval.NewHTTP(nil, nil), content, &transport.Config{}, log, openapiValidatorOptions)
 
 			req := httptest.NewRequest(tt.requestMethod, "http://1.2.3.4"+tt.requestPath, nil)
 
@@ -311,7 +311,7 @@ func TestBackend_director(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			hclContext := helper.NewProxyContext(tt.inlineCtx)
 
-			backend := transport.NewBackend(eval.NewENVContext(nil), hclContext, &transport.Config{
+			backend := transport.NewBackend(eval.NewHTTP(nil, nil), hclContext, &transport.Config{
 				Timeout: time.Second,
 			}, nullLog, nil)
 
@@ -396,7 +396,7 @@ func TestProxy_BufferingOptions(t *testing.T) {
 		t.Run(tc.name, func(st *testing.T) {
 			h := test.New(st)
 
-			backend := transport.NewBackend(eval.NewENVContext(nil), configload.MergeBodies([]hcl.Body{
+			backend := transport.NewBackend(eval.NewHTTP(nil, nil), configload.MergeBodies([]hcl.Body{
 				test.NewRemainContext("origin", "http://"+origin.Listener.Addr().String()),
 				helper.NewProxyContext(tc.remain),
 			}), &transport.Config{}, nullLog, newOptions())

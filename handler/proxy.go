@@ -17,11 +17,11 @@ import (
 type Proxy struct {
 	backend      http.RoundTripper
 	context      hcl.Body
-	evalCtx      *hcl.EvalContext
+	evalCtx      *eval.HTTP
 	reverseProxy *httputil.ReverseProxy
 }
 
-func NewProxy(backend http.RoundTripper, ctx hcl.Body, evalCtx *hcl.EvalContext) *Proxy {
+func NewProxy(backend http.RoundTripper, ctx hcl.Body, evalCtx *eval.HTTP) *Proxy {
 	proxy := &Proxy{
 		backend: backend,
 		context: ctx,

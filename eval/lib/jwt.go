@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/avenga/couper/config"
+	jwtconf "github.com/avenga/couper/config/jwt"
 	"github.com/avenga/couper/internal/seetie"
 	"github.com/dgrijalva/jwt-go/v4"
 	"github.com/hashicorp/hcl/v2"
@@ -31,8 +31,8 @@ func (e *JwtSigningError) Error() string {
 	return e.error.Error()
 }
 
-func NewJwtSignFunction(jwtSigningProfiles []*config.JWTSigningProfile, confCtx *hcl.EvalContext) function.Function {
-	signingProfiles := make(map[string]*config.JWTSigningProfile)
+func NewJwtSignFunction(jwtSigningProfiles []*jwtconf.JWTSigningProfile, confCtx *hcl.EvalContext) function.Function {
+	signingProfiles := make(map[string]*jwtconf.JWTSigningProfile)
 	for _, sp := range jwtSigningProfiles {
 		signingProfiles[sp.Name] = sp
 	}

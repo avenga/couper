@@ -3,6 +3,8 @@ package lib_test
 import (
 	"encoding/base64"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -333,7 +335,7 @@ BShcGHZl9nzWDtEZzgdX7cbG5nRUo1+whzBQdYoQmg==
 			if err != nil {
 				t.Fatal(err)
 			}
-			token, err := cf.Context.Functions["jwt_sign"].Call([]cty.Value{cty.StringVal(tt.jspLabel), claims})
+			token, err := cf.Context.HTTPContext(0, nil, nil, nil).Functions["jwt_sign"].Call([]cty.Value{cty.StringVal(tt.jspLabel), claims})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -351,6 +353,7 @@ func TestJwtSignDynamic(t *testing.T) {
 		jspLabel string
 		claims   string
 		wantTTL  int64
+		wantMeth string
 	}{
 		{
 			"ttl 1h",
@@ -363,6 +366,7 @@ func TestJwtSignDynamic(t *testing.T) {
 					key = "$3cRe4"
 					ttl = "1h"
 					claims = {
+						x-method = req.method
 						exp = 1234567890
 					}
 				}
@@ -371,6 +375,7 @@ func TestJwtSignDynamic(t *testing.T) {
 			"MyToken",
 			`{"sub": "12345"}`,
 			3600,
+			"POST",
 		},
 		{
 			"ttl 60.6s",
@@ -382,12 +387,16 @@ func TestJwtSignDynamic(t *testing.T) {
 					signature_algorithm = "HS256"
 					key = "$3cRe4"
 					ttl = "60.6s"
+					claims = {
+						x-method = req.method
+					}
 				}
 			}
 			`,
 			"MyToken",
 			`{"sub": "12345"}`,
 			60,
+			"POST",
 		},
 	}
 
@@ -401,8 +410,9 @@ func TestJwtSignDynamic(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			req := httptest.NewRequest(http.MethodPost, "http://1.2.3.4/", nil)
 			now := time.Now().Unix()
-			token, err := cf.Context.Functions["jwt_sign"].Call([]cty.Value{cty.StringVal(tt.jspLabel), claims})
+			token, err := cf.Context.HTTPContext(0, req, nil, nil).Functions["jwt_sign"].Call([]cty.Value{cty.StringVal(tt.jspLabel), claims})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -426,6 +436,12 @@ func TestJwtSignDynamic(t *testing.T) {
 			if int64(exp)-now != tt.wantTTL {
 				t.Errorf(string(body))
 				t.Errorf("Expected %d, got: %d", tt.wantTTL, int64(exp)-now)
+			}
+			if resultClaims["x-method"] == nil {
+				t.Errorf("Expected x-method claim, got: %#v", body)
+			}
+			if resultClaims["x-method"] != tt.wantMeth {
+				t.Errorf("Expected: %s, got: %s", tt.wantMeth, resultClaims["x-method"])
 			}
 		})
 	}
@@ -564,7 +580,7 @@ func TestJwtSignError(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, err = cf.Context.Functions["jwt_sign"].Call([]cty.Value{cty.StringVal(tt.jspLabel), claims})
+			_, err = cf.Context.HTTPContext(0, nil, nil, nil).Functions["jwt_sign"].Call([]cty.Value{cty.StringVal(tt.jspLabel), claims})
 			if err == nil {
 				t.Fatal(err)
 			}

@@ -9,6 +9,7 @@ import (
 	"github.com/sirupsen/logrus/hooks/test"
 
 	"github.com/avenga/couper/config/configload"
+	"github.com/avenga/couper/config/jwt"
 	"github.com/avenga/couper/eval"
 	"github.com/avenga/couper/handler"
 )
@@ -29,7 +30,7 @@ func (h *Helper) NewProxy(conf *transport.Config, backendContext, proxyContext h
 		proxyCtx = hcl.EmptyBody()
 	}
 
-	evalCtx := eval.NewENVContext(nil)
+	evalCtx := eval.NewHTTP(eval.NewENVContext(nil), []*jwt.JWTSigningProfile{})
 	backend := transport.NewBackend(evalCtx, backendContext, config, logger.WithContext(context.Background()), nil)
 
 	proxy := handler.NewProxy(backend, proxyCtx, evalCtx)

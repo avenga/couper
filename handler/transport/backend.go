@@ -37,7 +37,7 @@ var ReClientSupportsGZ = regexp.MustCompile(`(?i)\b` + GzipName + `\b`)
 type Backend struct {
 	accessControl    string // maps to basic-auth atm
 	context          hcl.Body
-	evalContext      *hcl.EvalContext
+	evalContext      *eval.HTTP
 	name             string
 	openAPIValidator *validation.OpenAPI
 	transportConf    *Config
@@ -48,7 +48,7 @@ type Backend struct {
 }
 
 // NewBackend creates a new <*Backend> object by the given <*Config>.
-func NewBackend(evalCtx *hcl.EvalContext, ctx hcl.Body, conf *Config, log *logrus.Entry, openAPIopts *validation.OpenAPIOptions) http.RoundTripper {
+func NewBackend(evalCtx *eval.HTTP, ctx hcl.Body, conf *Config, log *logrus.Entry, openAPIopts *validation.OpenAPIOptions) http.RoundTripper {
 	logEntry := log
 	if conf.BackendName != "" {
 		logEntry = log.WithField("backend", conf.BackendName)
@@ -144,7 +144,7 @@ func (b *Backend) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func (b *Backend) evalTransport(req *http.Request) *Config {
-	httpContext := eval.NewHTTPContext(b.evalContext, eval.BufferNone, req)
+	httpContext := b.evalContext.HTTPContext(eval.BufferNone, req)
 	content, _, diags := b.context.PartialContent(config.BackendInlineSchema)
 	if diags.HasErrors() {
 		b.upstreamLog.LogEntry().Error(diags)

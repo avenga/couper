@@ -18,7 +18,6 @@ import (
 	"github.com/avenga/couper/config/parser"
 	"github.com/avenga/couper/config/startup"
 	"github.com/avenga/couper/eval"
-	"github.com/avenga/couper/eval/lib"
 )
 
 const (
@@ -65,7 +64,6 @@ func LoadConfig(body hcl.Body, src []byte) (*config.Couper, error) {
 
 	couperConfig := &config.Couper{
 		Bytes:       src,
-		Context:     envContext,
 		Definitions: &config.Definitions{},
 		Settings:    &defaults,
 	}
@@ -104,21 +102,22 @@ func LoadConfig(body hcl.Body, src []byte) (*config.Couper, error) {
 				}
 			}
 
-			if diags = gohcl.DecodeBody(leftOver, couperConfig.Context, couperConfig.Definitions); diags.HasErrors() {
+			if diags = gohcl.DecodeBody(leftOver, envContext, couperConfig.Definitions); diags.HasErrors() {
 				return nil, diags
 			}
 		case settings:
-			if diags = gohcl.DecodeBody(outerBlock.Body, couperConfig.Context, couperConfig.Settings); diags.HasErrors() {
+			if diags = gohcl.DecodeBody(outerBlock.Body, envContext, couperConfig.Settings); diags.HasErrors() {
 				return nil, diags
 			}
 		}
 	}
-	couperConfig.Context.Functions["jwt_sign"] = lib.NewJwtSignFunction(couperConfig.Definitions.JWTSigningProfile, couperConfig.Context)
+
+	couperConfig.Context = eval.NewHTTP(envContext, couperConfig.Definitions.JWTSigningProfile)
 
 	// Read per server block and merge backend settings which results in a final server configuration.
 	for _, serverBlock := range content.Blocks.OfType(server) {
 		serverConfig := &config.Server{}
-		if diags = gohcl.DecodeBody(serverBlock.Body, couperConfig.Context, serverConfig); diags.HasErrors() {
+		if diags = gohcl.DecodeBody(serverBlock.Body, envContext, serverConfig); diags.HasErrors() {
 			return nil, diags
 		}
 

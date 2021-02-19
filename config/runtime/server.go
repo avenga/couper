@@ -69,7 +69,7 @@ func NewServerConfiguration(conf *config.Couper, log *logrus.Entry) (ServerConfi
 	noopReq := httptest.NewRequest(http.MethodGet, "https://couper.io", nil)
 	noopResp := httptest.NewRecorder().Result()
 	noopResp.Request = noopReq
-	confCtx := eval.NewHTTPContext(conf.Context, 0, noopReq, noopResp)
+	confCtx := conf.Context.HTTPContext(0, noopReq, noopResp)
 
 	validPortMap, hostsMap, err := validatePortHosts(conf, defaultPort)
 	if err != nil {
@@ -181,11 +181,11 @@ func NewServerConfiguration(conf *config.Couper, log *logrus.Entry) (ServerConfi
 			//var redirect producer.Redirect
 
 			for _, proxyConf := range endpointConf.Proxies {
-				backend, berr := newBackend(confCtx, proxyConf.Backend, log, conf.Settings.NoProxyFromEnv)
+				backend, berr := newBackend(conf.Context, proxyConf.Backend, log, conf.Settings.NoProxyFromEnv)
 				if berr != nil {
 					return nil, berr
 				}
-				proxyHandler := handler.NewProxy(backend, proxyConf.HCLBody(), confCtx)
+				proxyHandler := handler.NewProxy(backend, proxyConf.HCLBody(), conf.Context)
 				p := &producer.Proxy{
 					Name:      proxyConf.Name,
 					RoundTrip: proxyHandler,
@@ -194,7 +194,7 @@ func NewServerConfiguration(conf *config.Couper, log *logrus.Entry) (ServerConfi
 			}
 
 			for _, requestConf := range endpointConf.Requests {
-				backend, berr := newBackend(confCtx, requestConf.Backend, log, conf.Settings.NoProxyFromEnv)
+				backend, berr := newBackend(conf.Context, requestConf.Backend, log, conf.Settings.NoProxyFromEnv)
 				if berr != nil {
 					return nil, berr
 				}
@@ -256,7 +256,7 @@ func NewServerConfiguration(conf *config.Couper, log *logrus.Entry) (ServerConfi
 				ReqBufferOpts:  bufferOpts,
 				ServerOpts:     serverOptions,
 			}
-			epHandler := handler.NewEndpoint(epOpts, confCtx, log, proxies, requests, response)
+			epHandler := handler.NewEndpoint(epOpts, conf.Context, log, proxies, requests, response)
 			setACHandlerFn(epHandler)
 
 			err = setRoutesFromHosts(serverConfiguration, serverOptions.ServerErrTpl, defaultPort, srvConf.Hosts, pattern, endpointHandlers[endpointConf], kind)
@@ -269,9 +269,10 @@ func NewServerConfiguration(conf *config.Couper, log *logrus.Entry) (ServerConfi
 	return serverConfiguration, nil
 }
 
-func newBackend(evalCtx *hcl.EvalContext, backendCtx hcl.Body, log *logrus.Entry, ignoreProxyEnv bool) (http.RoundTripper, error) {
+func newBackend(evalCtx *eval.HTTP, backendCtx hcl.Body, log *logrus.Entry, ignoreProxyEnv bool) (http.RoundTripper, error) {
+	localContext := evalCtx.HTTPContext(0, nil)
 	beConf := *DefaultBackendConf
-	if diags := gohcl.DecodeBody(backendCtx, evalCtx, &beConf); diags.HasErrors() {
+	if diags := gohcl.DecodeBody(backendCtx, localContext, &beConf); diags.HasErrors() {
 		return nil, diags
 	}
 
