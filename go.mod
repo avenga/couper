@@ -8,6 +8,7 @@ require (
 	github.com/getkin/kin-openapi v0.37.0
 	github.com/hashicorp/hcl/v2 v2.8.2
 	github.com/rs/xid v1.2.1
+	github.com/russellhaering/gosaml2 v0.6.0
 	github.com/satori/go.uuid v1.2.0
 	github.com/sirupsen/logrus v1.7.0
 	github.com/zclconf/go-cty v1.5.0
