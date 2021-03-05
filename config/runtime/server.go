@@ -141,13 +141,21 @@ func NewServerConfiguration(conf *config.Couper, log *logrus.Entry) (ServerConfi
 			//var cors *config.CORS
 			var errTpl *errors.Template
 
+			if endpointConf.ErrorFile != "" {
+				errTpl, err = errors.NewTemplateFromFile(endpointConf.ErrorFile)
+				if err != nil {
+					return nil, err
+				}
+			} else if parentAPI != nil {
+				errTpl = serverOptions.APIErrTpl[parentAPI]
+			} else {
+				errTpl = serverOptions.ServerErrTpl
+			}
 			if parentAPI != nil {
 				basePath = serverOptions.APIBasePath[parentAPI]
 				//cors = parentAPI.CORS
-				errTpl = serverOptions.APIErrTpl[parentAPI]
 			} else {
 				basePath = serverOptions.SrvBasePath
-				errTpl = serverOptions.ServerErrTpl
 			}
 
 			pattern := utils.JoinPath(basePath, endpointConf.Pattern)
