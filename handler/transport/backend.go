@@ -125,15 +125,12 @@ func (b *Backend) RoundTrip(req *http.Request) (*http.Response, error) {
 		return nil, err
 	}
 
-	var isResourceReq bool
-	if is, ok := req.Context().Value(request.IsResourceReq).(bool); ok {
-		isResourceReq = is
-	}
-
-	if isResourceReq && beresp.StatusCode == http.StatusUnauthorized {
-		if memStore, ok := req.Context().Value(request.TokenEndpoint).(*cache.MemoryStore); ok {
-			if key, ok := req.Context().Value(request.TokenKey).(string); ok && key != "" {
-				memStore.Del(key)
+	if is, ok := req.Context().Value(request.IsResourceReq).(bool); ok && is {
+		if beresp.StatusCode == http.StatusUnauthorized {
+			if memStore, ok := req.Context().Value(request.MemStore).(*cache.MemoryStore); ok {
+				if key, ok := req.Context().Value(request.TokenKey).(string); ok && key != "" {
+					memStore.Del(key)
+				}
 			}
 		}
 	}
@@ -155,15 +152,6 @@ func (b *Backend) RoundTrip(req *http.Request) (*http.Response, error) {
 	if !isProxyReq {
 		removeConnectionHeaders(req.Header)
 	}
-
-	// FIXME:
-	// for _, key := range headerBlacklist {
-	// 	if isResourceReq && strings.ToLower(key) == "authorization" {
-	// 		continue
-	// 	}
-
-	// 	headerCtx.Del(key)
-	// }
 
 	err = eval.ApplyResponseContext(b.evalContext, b.context, req, beresp)
 	beresp.Request = req
