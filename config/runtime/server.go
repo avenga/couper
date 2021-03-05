@@ -304,6 +304,16 @@ func newBackend(evalCtx *hcl.EvalContext, backendCtx hcl.Body, log *logrus.Entry
 	}
 
 	backend := transport.NewBackend(evalCtx, backendCtx, tc, log, openAPIopts)
+
+	if beConf.OAuth2 != nil {
+		prev, err := newBackend(evalCtx, beConf.OAuth2.Remain, log, ignoreProxyEnv)
+		if err != nil {
+			return nil, err
+		}
+
+		return transport.NewOAuth2(evalCtx, beConf.OAuth2, prev, backend)
+	}
+
 	return backend, nil
 }
 

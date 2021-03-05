@@ -85,6 +85,10 @@ func (u *UpstreamLog) RoundTrip(req *http.Request) (*http.Response, error) {
 		fields["auth_user"] = user
 	}
 
+	if url, ok := req.Context().Value(request.TokenEndpoint).(string); ok && url != "" {
+		fields["token_request"] = "oauth2"
+	}
+
 	if !u.config.NoProxyFromEnv {
 		proxyUrl, perr := http.ProxyFromEnvironment(req)
 		if perr == nil && proxyUrl != nil {

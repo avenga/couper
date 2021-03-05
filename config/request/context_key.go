@@ -7,10 +7,14 @@ const (
 	BackendName
 	Endpoint
 	EndpointKind
+	IsResourceReq
 	OpenAPI
+	MemStore
 	PathParams
 	RoundTripName
 	RoundTripProxy
 	ServerName
+	TokenEndpoint
+	TokenKey
 	Wildcard
 )

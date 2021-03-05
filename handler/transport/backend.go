@@ -12,6 +12,7 @@ import (
 	"github.com/hashicorp/hcl/v2"
 	"github.com/sirupsen/logrus"
 
+	"github.com/avenga/couper/cache"
 	"github.com/avenga/couper/config"
 	"github.com/avenga/couper/config/request"
 	couperErr "github.com/avenga/couper/errors"
@@ -71,6 +72,14 @@ func (b *Backend) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	tc := b.evalTransport(req)
+
+	if url, ok := req.Context().Value(request.TokenEndpoint).(string); ok && url != "" {
+		err := reconfigureTC(tc, url)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	t := Get(tc)
 
 	if req.URL.Scheme == "" {
@@ -114,6 +123,16 @@ func (b *Backend) RoundTrip(req *http.Request) (*http.Response, error) {
 	beresp, err := t.RoundTrip(req)
 	if err != nil {
 		return nil, err
+	}
+
+	if is, ok := req.Context().Value(request.IsResourceReq).(bool); ok && is {
+		if beresp.StatusCode == http.StatusUnauthorized {
+			if memStore, ok := req.Context().Value(request.TokenEndpoint).(*cache.MemoryStore); ok {
+				if key, ok := req.Context().Value(request.TokenKey).(string); ok && key != "" {
+					memStore.Del(key)
+				}
+			}
+		}
 	}
 
 	if b.openAPIValidator != nil {
@@ -160,6 +179,22 @@ func (b *Backend) evalTransport(req *http.Request) *Config {
 	}
 
 	return b.transportConf.With(originURL.Scheme, originURL.Host, hostname)
+}
+
+func reconfigureTC(tc *Config, tokenEndpoint string) error {
+	u, err := url.Parse(tokenEndpoint)
+	if err != nil {
+		return err
+	}
+
+	// TODO: Check tokenEndpoint.Host vs. backend.Origin
+
+	newTC := tc.With(u.Scheme, u.Host, u.Host)
+	newTC.BackendName = "oauth2-" + tokenEndpoint
+
+	*tc = *newTC
+
+	return nil
 }
 
 func getAttribute(ctx *hcl.EvalContext, name string, body *hcl.BodyContent) string {
