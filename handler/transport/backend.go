@@ -42,12 +42,10 @@ type Backend struct {
 	openAPIValidator *validation.OpenAPI
 	transportConf    *Config
 	upstreamLog      *logging.UpstreamLog
-	// oauth
-	// ...
 	// TODO: OrderedList for origin AC, middlewares etc.
 }
 
-// NewBackend creates a new <*Backend> object by the given <*Config>.
+// NewBackend creates a new <http.RoundTripper> object.
 func NewBackend(evalCtx *hcl.EvalContext, ctx hcl.Body, conf *Config, log *logrus.Entry, openAPIopts *validation.OpenAPIOptions) http.RoundTripper {
 	logEntry := log
 	if conf.BackendName != "" {
@@ -86,8 +84,6 @@ func (b *Backend) RoundTrip(req *http.Request) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	// oauth ....
 
 	if b.accessControl != "" {
 		auth := base64.StdEncoding.EncodeToString([]byte(b.accessControl))
