@@ -15,7 +15,7 @@ import (
 	ac "github.com/avenga/couper/accesscontrol"
 )
 
-func TestJWT_Validate(t *testing.T) {
+func Test_JWT_Validate(t *testing.T) {
 	type fields struct {
 		algorithm      ac.Algorithm
 		claims         ac.Claims
