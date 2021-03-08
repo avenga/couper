@@ -18,6 +18,7 @@ import (
 	"github.com/avenga/couper/config/parser"
 	"github.com/avenga/couper/config/startup"
 	"github.com/avenga/couper/eval"
+	"github.com/avenga/couper/eval/lib"
 )
 
 const (
@@ -112,6 +113,8 @@ func LoadConfig(body hcl.Body, src []byte) (*config.Couper, error) {
 			}
 		}
 	}
+
+	couperConfig.Context.Functions["saml_sso_url"] = lib.NewSamlSsoUrlFunction(couperConfig.Definitions.SAML)
 
 	// Read per server block and merge backend settings which results in a final server configuration.
 	for _, serverBlock := range content.Blocks.OfType(server) {
