@@ -2,9 +2,12 @@ package server_test
 
 import (
 	"io/ioutil"
+	"net"
 	"net/http"
+	"net/http/httptest"
 	"path"
 	"testing"
+	"time"
 
 	"github.com/avenga/couper/internal/test"
 )
@@ -74,5 +77,61 @@ func TestEndpoints_Res(t *testing.T) {
 
 	if string(resBytes) != "string" {
 		t.Errorf("Expected body 'string', given %s", resBytes)
+	}
+}
+
+func TestEndpoints_OAuth2(t *testing.T) {
+	helper := test.New(t)
+	seenCh := make(chan struct{})
+
+	origin := httptest.NewUnstartedServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		if req.URL.Path == "/oauth2" {
+			rw.Header().Set("Content-Type", "application/json")
+			rw.WriteHeader(http.StatusOK)
+
+			body := []byte(`{
+				"access_token": "abcdef0123456789",
+				"token_type": "bearer",
+				"expires_in": 100
+			}`)
+			rw.Write(body)
+
+			return
+		}
+
+		if req.URL.Path == "/resource" {
+			if req.Header.Get("Authorization") == "Bearer abcdef0123456789" {
+				rw.WriteHeader(http.StatusNoContent)
+
+				go func() {
+					seenCh <- struct{}{}
+				}()
+
+				return
+			}
+		}
+
+		rw.WriteHeader(http.StatusBadRequest)
+	}))
+	ln, err := net.Listen("tcp4", testProxyAddr[7:])
+	helper.Must(err)
+	origin.Listener = ln
+	origin.Start()
+	defer origin.Close()
+	confPath := "testdata/endpoints/03_couper.hcl"
+	shutdown, _ := newCouper(confPath, test.New(t))
+	defer shutdown()
+
+	req, err := http.NewRequest(http.MethodGet, "http://anyserver:8080/", nil)
+	helper.Must(err)
+
+	_, err = newClient().Do(req)
+	helper.Must(err)
+
+	timer := time.NewTimer(time.Second)
+	select {
+	case <-timer.C:
+		t.Error("OAuth2 request failed")
+	case <-seenCh:
 	}
 }
