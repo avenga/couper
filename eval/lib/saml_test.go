@@ -85,7 +85,7 @@ func Test_SamlSsoUrl(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			ssoUrl, err := cf.Context.Functions["saml_sso_url"].Call([]cty.Value{cty.StringVal(tt.samlLabel)})
+			ssoUrl, err := cf.Context.HCLContext().Functions["saml_sso_url"].Call([]cty.Value{cty.StringVal(tt.samlLabel)})
 			if err == nil && tt.wantErr {
 				t.Fatal("Error expected")
 			}

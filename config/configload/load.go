@@ -114,7 +114,7 @@ func LoadConfig(body hcl.Body, src []byte) (*config.Couper, error) {
 		}
 	}
 
-	couperConfig.Context.Functions["saml_sso_url"] = lib.NewSamlSsoUrlFunction(couperConfig.Definitions.SAML)
+	couperConfig.Context.HCLContext().Functions["saml_sso_url"] = lib.NewSamlSsoUrlFunction(couperConfig.Definitions.SAML)
 
 	// Read per server block and merge backend settings which results in a final server configuration.
 	for _, serverBlock := range content.Blocks.OfType(server) {
