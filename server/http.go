@@ -11,7 +11,6 @@ import (
 	uuid "github.com/satori/go.uuid"
 	"github.com/sirupsen/logrus"
 
-	"github.com/avenga/couper/cache"
 	"github.com/avenga/couper/config"
 	"github.com/avenga/couper/config/env"
 	"github.com/avenga/couper/config/request"
@@ -30,7 +29,6 @@ type HTTPServer struct {
 	timings    *runtime.HTTPTimings
 	listener   net.Listener
 	log        logrus.FieldLogger
-	memStore   *cache.MemoryStore
 	mux        *Mux
 	port       string
 	shutdownCh chan struct{}
@@ -42,12 +40,11 @@ type HTTPServer struct {
 func NewServerList(
 	cmdCtx context.Context, log logrus.FieldLogger, settings *config.Settings,
 	timings *runtime.HTTPTimings, srvConf runtime.ServerConfiguration,
-	memStore *cache.MemoryStore,
 ) ([]*HTTPServer, func()) {
 	var list []*HTTPServer
 
 	for port, srvMux := range srvConf {
-		list = append(list, New(cmdCtx, log, settings, timings, port, srvMux, memStore))
+		list = append(list, New(cmdCtx, log, settings, timings, port, srvMux))
 	}
 
 	handleShutdownFn := func() {
@@ -62,7 +59,6 @@ func NewServerList(
 func New(
 	cmdCtx context.Context, log logrus.FieldLogger, settings *config.Settings,
 	timings *runtime.HTTPTimings, p runtime.Port, muxOpts *runtime.MuxOptions,
-	memStore *cache.MemoryStore,
 ) *HTTPServer {
 	var uidFn func() string
 	if settings.RequestIDFormat == "uuid4" {
@@ -88,7 +84,6 @@ func New(
 		accessLog:  logging.NewAccessLog(&logConf, log),
 		commandCtx: cmdCtx,
 		log:        log,
-		memStore:   memStore,
 		mux:        mux,
 		port:       p.String(),
 		settings:   settings,
@@ -175,7 +170,6 @@ func (s *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	uid := s.uidFn()
 	ctx := context.WithValue(req.Context(), request.UID, uid)
-	ctx = context.WithValue(ctx, request.MemStore, s.memStore)
 	*req = *req.WithContext(ctx)
 
 	req.Host = s.getHost(req)

@@ -20,6 +20,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	ac "github.com/avenga/couper/accesscontrol"
+	"github.com/avenga/couper/cache"
 	"github.com/avenga/couper/config"
 	"github.com/avenga/couper/config/runtime/server"
 	"github.com/avenga/couper/errors"
@@ -62,7 +63,9 @@ type endpointMap map[*config.Endpoint]*config.API
 
 // NewServerConfiguration sets http handler specific defaults and validates the given gateway configuration.
 // Wire up all endpoints and maps them within the returned Server.
-func NewServerConfiguration(conf *config.Couper, log *logrus.Entry) (ServerConfiguration, error) {
+func NewServerConfiguration(
+	conf *config.Couper, log *logrus.Entry, memStore *cache.MemoryStore,
+) (ServerConfiguration, error) {
 	defaultPort := conf.Settings.DefaultPort
 
 	// confCtx is created to evaluate request / response related configuration errors on start.
@@ -181,7 +184,7 @@ func NewServerConfiguration(conf *config.Couper, log *logrus.Entry) (ServerConfi
 			//var redirect producer.Redirect
 
 			for _, proxyConf := range endpointConf.Proxies {
-				backend, berr := newBackend(confCtx, proxyConf.Backend, log, conf.Settings.NoProxyFromEnv)
+				backend, berr := newBackend(confCtx, proxyConf.Backend, log, conf.Settings.NoProxyFromEnv, memStore)
 				if berr != nil {
 					return nil, berr
 				}
@@ -194,7 +197,7 @@ func NewServerConfiguration(conf *config.Couper, log *logrus.Entry) (ServerConfi
 			}
 
 			for _, requestConf := range endpointConf.Requests {
-				backend, berr := newBackend(confCtx, requestConf.Backend, log, conf.Settings.NoProxyFromEnv)
+				backend, berr := newBackend(confCtx, requestConf.Backend, log, conf.Settings.NoProxyFromEnv, memStore)
 				if berr != nil {
 					return nil, berr
 				}
@@ -269,7 +272,10 @@ func NewServerConfiguration(conf *config.Couper, log *logrus.Entry) (ServerConfi
 	return serverConfiguration, nil
 }
 
-func newBackend(evalCtx *hcl.EvalContext, backendCtx hcl.Body, log *logrus.Entry, ignoreProxyEnv bool) (http.RoundTripper, error) {
+func newBackend(
+	evalCtx *hcl.EvalContext, backendCtx hcl.Body, log *logrus.Entry,
+	ignoreProxyEnv bool, memStore *cache.MemoryStore,
+) (http.RoundTripper, error) {
 	beConf := *DefaultBackendConf
 	if diags := gohcl.DecodeBody(backendCtx, evalCtx, &beConf); diags.HasErrors() {
 		return nil, diags
@@ -306,12 +312,12 @@ func newBackend(evalCtx *hcl.EvalContext, backendCtx hcl.Body, log *logrus.Entry
 	backend := transport.NewBackend(evalCtx, backendCtx, tc, log, openAPIopts)
 
 	if beConf.OAuth2 != nil {
-		prev, err := newBackend(evalCtx, beConf.OAuth2.Remain, log, ignoreProxyEnv)
+		prev, err := newBackend(evalCtx, beConf.OAuth2.Remain, log, ignoreProxyEnv, memStore)
 		if err != nil {
 			return nil, err
 		}
 
-		return transport.NewOAuth2(evalCtx, beConf.OAuth2, prev, backend)
+		return transport.NewOAuth2(evalCtx, beConf.OAuth2, memStore, prev, backend)
 	}
 
 	return backend, nil

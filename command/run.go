@@ -43,15 +43,13 @@ func (r Run) Execute(args Args, config *config.Couper, logEntry *logrus.Entry) e
 	env.Decode(&timings)
 
 	// logEntry has still the 'daemon' type which can be used for config related load errors.
-	srvMux, err := runtime.NewServerConfiguration(config, logEntry)
+	srvMux, err := runtime.NewServerConfiguration(config, logEntry, cache.New())
 	if err != nil {
 		return err
 	}
 
-	memStore := cache.New()
-
 	serverList, listenCmdShutdown := server.NewServerList(
-		r.context, logEntry.Logger, config.Settings, &timings, srvMux, memStore,
+		r.context, logEntry.Logger, config.Settings, &timings, srvMux,
 	)
 
 	for _, srv := range serverList {
