@@ -127,14 +127,17 @@ func (oa *OAuth2) getCredentials(req *http.Request) (string, string, string, err
 		return "", "", "", diags
 	}
 
-	evalCtx := eval.NewHTTPContext(oa.evalCtx, eval.BufferNone, req)
+	var httpContext *hcl.EvalContext
+	if httpCtx, ok := req.Context().Value(eval.ContextType).(*eval.Context); ok {
+		httpContext = httpCtx.HCLContext()
+	}
 
 	id, idOK := content.Attributes["client_id"]
-	idv, _ := id.Expr.Value(evalCtx)
+	idv, _ := id.Expr.Value(httpContext)
 	clientID := seetie.ValueToString(idv)
 
 	secret, secretOK := content.Attributes["client_secret"]
-	secretv, _ := secret.Expr.Value(evalCtx)
+	secretv, _ := secret.Expr.Value(httpContext)
 	clientSecret := seetie.ValueToString(secretv)
 
 	if !idOK || !secretOK {

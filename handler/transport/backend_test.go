@@ -32,7 +32,7 @@ import (
 func TestBackend_RoundTrip_Timings(t *testing.T) {
 	origin := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		if req.Method == http.MethodHead {
-			time.Sleep(time.Second * 2) // > ttfb proxy settings
+			time.Sleep(time.Second * 2) // > ttfb and overall timeout
 		}
 		rw.WriteHeader(http.StatusNoContent)
 	}))
@@ -46,7 +46,7 @@ func TestBackend_RoundTrip_Timings(t *testing.T) {
 		expectedErr string
 	}{
 		{"with zero timings", test.NewRemainContext("origin", origin.URL), &transport.Config{}, httptest.NewRequest(http.MethodGet, "http://1.2.3.4/", nil), ""},
-		{"with overall timeout", test.NewRemainContext("origin", "http://10.1.2.3"), &transport.Config{Timeout: time.Second / 2}, httptest.NewRequest(http.MethodGet, "http://1.2.3.5/", nil), "context deadline exceeded"},
+		{"with overall timeout", test.NewRemainContext("origin", origin.URL), &transport.Config{Timeout: time.Second / 2, ConnectTimeout: time.Minute}, httptest.NewRequest(http.MethodHead, "http://1.2.3.5/", nil), "context deadline exceeded"},
 		{"with connect timeout", test.NewRemainContext("origin", "http://blackhole.webpagetest.org"), &transport.Config{ConnectTimeout: time.Second / 2}, httptest.NewRequest(http.MethodGet, "http://1.2.3.6/", nil), "i/o timeout"},
 		{"with ttfb timeout", test.NewRemainContext("origin", origin.URL), &transport.Config{TTFBTimeout: time.Second}, httptest.NewRequest(http.MethodHead, "http://1.2.3.7/", nil), "timeout awaiting response headers"},
 	}
@@ -59,7 +59,7 @@ func TestBackend_RoundTrip_Timings(t *testing.T) {
 			hook.Reset()
 
 			tt.tconf.NoProxyFromEnv = true // use origin addr from transport.Config
-			backend := transport.NewBackend(eval.NewENVContext(nil), tt.context, tt.tconf, log, nil)
+			backend := transport.NewBackend(tt.context, tt.tconf, log, nil)
 
 			_, err := backend.RoundTrip(tt.req)
 			if err != nil && tt.expectedErr == "" {
@@ -95,7 +95,7 @@ func TestBackend_Compression_Disabled(t *testing.T) {
 			"origin": hcltest.MockExprLiteral(u),
 		}),
 	})
-	backend := transport.NewBackend(eval.NewENVContext(nil), hclBody, &transport.Config{}, log, nil)
+	backend := transport.NewBackend(hclBody, &transport.Config{}, log, nil)
 
 	req := httptest.NewRequest(http.MethodOptions, "http://1.2.3.4/", nil)
 	res, err := backend.RoundTrip(req)
@@ -136,7 +136,7 @@ func TestBackend_Compression_ModifyAcceptEncoding(t *testing.T) {
 		}),
 	})
 
-	backend := transport.NewBackend(eval.NewENVContext(nil), hclBody, &transport.Config{
+	backend := transport.NewBackend(hclBody, &transport.Config{
 		Origin: origin.URL,
 	}, log, nil)
 
@@ -236,7 +236,7 @@ func TestBackend_RoundTrip_Validation(t *testing.T) {
 				origin = "` + origin.URL + `"
 			`)
 
-			backend := transport.NewBackend(eval.NewENVContext(nil), content, &transport.Config{}, log, openapiValidatorOptions)
+			backend := transport.NewBackend(content, &transport.Config{}, log, openapiValidatorOptions)
 
 			req := httptest.NewRequest(tt.requestMethod, "http://1.2.3.4"+tt.requestPath, nil)
 
@@ -311,7 +311,7 @@ func TestBackend_director(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			hclContext := helper.NewProxyContext(tt.inlineCtx)
 
-			backend := transport.NewBackend(eval.NewENVContext(nil), hclContext, &transport.Config{
+			backend := transport.NewBackend(hclContext, &transport.Config{
 				Timeout: time.Second,
 			}, nullLog, nil)
 
@@ -326,7 +326,7 @@ func TestBackend_director(t *testing.T) {
 			if !ok && tt.expReq.Host != req.Host {
 				t.Errorf("expected same host value, want: %q, got: %q", req.Host, tt.expReq.Host)
 			} else if ok {
-				hostVal, _ := hostnameExp.Expr.Value(eval.NewENVContext(nil))
+				hostVal, _ := hostnameExp.Expr.Value(eval.NewContext(nil).HCLContext())
 				hostname := seetie.ValueToString(hostVal)
 				if hostname != tt.expReq.Host {
 					t.Errorf("expected a configured request host: %q, got: %q", hostname, tt.expReq.Host)
@@ -396,7 +396,7 @@ func TestProxy_BufferingOptions(t *testing.T) {
 		t.Run(tc.name, func(st *testing.T) {
 			h := test.New(st)
 
-			backend := transport.NewBackend(eval.NewENVContext(nil), configload.MergeBodies([]hcl.Body{
+			backend := transport.NewBackend(configload.MergeBodies([]hcl.Body{
 				test.NewRemainContext("origin", "http://"+origin.Listener.Addr().String()),
 				helper.NewProxyContext(tc.remain),
 			}), &transport.Config{}, nullLog, newOptions())

@@ -6,11 +6,11 @@ import (
 	"io/ioutil"
 	"net/url"
 	"path/filepath"
+	"regexp"
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/gohcl"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
-	"github.com/hashicorp/hcl/v2/hcltest"
 	"github.com/zclconf/go-cty/cty"
 
 	"github.com/avenga/couper/config"
@@ -28,7 +28,11 @@ const (
 	request     = "request"
 	server      = "server"
 	settings    = "settings"
+	// defaultNameLabel maps the the hcl label attr 'name'.
+	defaultNameLabel = "default"
 )
+
+var regexProxyRequestLabel = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
 
 func LoadFile(filePath string) (*config.Couper, error) {
 	_, err := startup.SetWorkingDirectory(filePath)
@@ -58,16 +62,16 @@ func LoadBytes(src []byte, filename string) (*config.Couper, error) {
 var envContext *hcl.EvalContext
 
 func LoadConfig(body hcl.Body, src []byte) (*config.Couper, error) {
-	envContext = eval.NewENVContext(src)
-
 	defaults := config.DefaultSettings
 
 	couperConfig := &config.Couper{
 		Bytes:       src,
-		Context:     envContext,
+		Context:     eval.NewContext(src),
 		Definitions: &config.Definitions{},
 		Settings:    &defaults,
 	}
+
+	envContext = couperConfig.Context.HCLContext()
 
 	schema, _ := gohcl.ImpliedBodySchema(couperConfig)
 	content, diags := body.Content(schema)
@@ -103,11 +107,11 @@ func LoadConfig(body hcl.Body, src []byte) (*config.Couper, error) {
 				}
 			}
 
-			if diags = gohcl.DecodeBody(leftOver, couperConfig.Context, couperConfig.Definitions); diags.HasErrors() {
+			if diags = gohcl.DecodeBody(leftOver, envContext, couperConfig.Definitions); diags.HasErrors() {
 				return nil, diags
 			}
 		case settings:
-			if diags = gohcl.DecodeBody(outerBlock.Body, couperConfig.Context, couperConfig.Settings); diags.HasErrors() {
+			if diags = gohcl.DecodeBody(outerBlock.Body, envContext, couperConfig.Settings); diags.HasErrors() {
 				return nil, diags
 			}
 		}
@@ -116,7 +120,7 @@ func LoadConfig(body hcl.Body, src []byte) (*config.Couper, error) {
 	// Read per server block and merge backend settings which results in a final server configuration.
 	for _, serverBlock := range content.Blocks.OfType(server) {
 		serverConfig := &config.Server{}
-		if diags = gohcl.DecodeBody(serverBlock.Body, couperConfig.Context, serverConfig); diags.HasErrors() {
+		if diags = gohcl.DecodeBody(serverBlock.Body, envContext, serverConfig); diags.HasErrors() {
 			return nil, diags
 		}
 
@@ -271,9 +275,17 @@ func refineEndpoints(definedBackends Backends, endpoints config.Endpoints) error
 
 		proxies := endpointContent.Blocks.OfType(proxy)
 		requests := endpointContent.Blocks.OfType(request)
+
+		if len(proxies)+len(requests) == 0 && endpoint.Response == nil {
+			return hcl.Diagnostics{&hcl.Diagnostic{
+				Severity: hcl.DiagError,
+				Summary:  "missing 'default' proxy or request block, or a response definition",
+				Subject:  &endpointContent.MissingItemRange,
+			}}
+		}
+
 		proxyRequestLabelRequired := len(proxies)+len(requests) > 1
 
-		const defaultNameLabel = "default"
 		for _, proxyBlock := range proxies {
 			// TODO: refactor with request construction below // almost same ( later :-) )
 			proxyConfig := &config.Proxy{}
@@ -340,19 +352,41 @@ func refineEndpoints(definedBackends Backends, endpoints config.Endpoints) error
 			endpoint.Requests = append(endpoint.Requests, reqConfig)
 		}
 
-		if proxyRequestLabelRequired {
-			unique := map[string]struct{}{}
-			itemRange := endpoint.Remain.MissingItemRange()
-			for _, p := range endpoint.Proxies {
+		names := map[string]struct{}{}
+		unique := map[string]struct{}{}
+		itemRange := endpoint.Remain.MissingItemRange()
+		for _, p := range endpoint.Proxies {
+			names[p.Name] = struct{}{}
+
+			if err := validLabelName(p.Name, &itemRange); err != nil {
+				return err
+			}
+
+			if proxyRequestLabelRequired {
 				if err := uniqueLabelName(unique, p.Name, &itemRange); err != nil {
 					return err
 				}
 			}
-			for _, r := range endpoint.Requests {
+		}
+
+		for _, r := range endpoint.Requests {
+			if err := validLabelName(r.Name, &itemRange); err != nil {
+				return err
+			}
+
+			if proxyRequestLabelRequired {
 				if err := uniqueLabelName(unique, r.Name, &itemRange); err != nil {
 					return err
 				}
 			}
+		}
+
+		if _, ok := names[defaultNameLabel]; !ok && endpoint.Response == nil {
+			return hcl.Diagnostics{&hcl.Diagnostic{
+				Severity: hcl.DiagError,
+				Summary:  "Missing a 'default' proxy or request definition, or a response block",
+				Subject:  &itemRange,
+			}}
 		}
 	}
 
@@ -394,9 +428,20 @@ func shouldCreateFromURL(url, backendName string, block *hcl.Block) (bool, error
 	return true, nil
 }
 
+func validLabelName(name string, hr *hcl.Range) error {
+	if !regexProxyRequestLabel.MatchString(name) {
+		return hcl.Diagnostics{&hcl.Diagnostic{
+			Severity: hcl.DiagError,
+			Summary:  "proxy or request label contains unallowed character(s), allowed are 'a-z', 'A-Z', '0-9' and '_'",
+			Subject:  hr,
+		}}
+	}
+	return nil
+}
+
 func uniqueLabelName(unique map[string]struct{}, name string, hr *hcl.Range) error {
 	if _, exist := unique[name]; exist {
-		if name == "default" {
+		if name == defaultNameLabel {
 			return hcl.Diagnostics{&hcl.Diagnostic{
 				Severity: hcl.DiagError,
 				Summary:  "proxy and request labels are required and only one 'default' label is allowed",
@@ -494,9 +539,9 @@ func newBackendFromURL(rawURL string) (hcl.Body, error) {
 
 	return hclbody.New(&hcl.BodyContent{
 		Attributes: map[string]*hcl.Attribute{
-			// TODO: replace with own expression literal
-			"origin": {Name: "origin", Expr: hcltest.MockExprLiteral(cty.StringVal(u.Scheme + "://" + u.Host))},
-			"path":   {Name: "path", Expr: hcltest.MockExprLiteral(cty.StringVal(u.RawPath))},
+			"name":   {Name: "name", Expr: &hclsyntax.LiteralValueExpr{Val: cty.StringVal(defaultNameLabel)}},
+			"origin": {Name: "origin", Expr: &hclsyntax.LiteralValueExpr{Val: cty.StringVal(u.Scheme + "://" + u.Host)}},
+			"path":   {Name: "path", Expr: &hclsyntax.LiteralValueExpr{Val: cty.StringVal(u.RawPath)}},
 			// TODO: set query_params (request) -vs- set_query_params (proxy)
 		},
 	}), nil

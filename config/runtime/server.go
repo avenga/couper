@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/docker/go-units"
 	"github.com/getkin/kin-openapi/pathpattern"
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/gohcl"
@@ -72,7 +73,7 @@ func NewServerConfiguration(
 	noopReq := httptest.NewRequest(http.MethodGet, "https://couper.io", nil)
 	noopResp := httptest.NewRecorder().Result()
 	noopResp.Request = noopReq
-	confCtx := eval.NewHTTPContext(conf.Context, 0, noopReq, noopResp)
+	confCtx := conf.Context.WithClientRequest(noopReq).WithBeresps(noopResp).HCLContext()
 
 	validPortMap, hostsMap, err := validatePortHosts(conf, defaultPort)
 	if err != nil {
@@ -188,7 +189,7 @@ func NewServerConfiguration(
 				if berr != nil {
 					return nil, berr
 				}
-				proxyHandler := handler.NewProxy(backend, proxyConf.HCLBody(), confCtx)
+				proxyHandler := handler.NewProxy(backend, proxyConf.HCLBody())
 				p := &producer.Proxy{
 					Name:      proxyConf.Name,
 					RoundTrip: proxyHandler,
@@ -234,7 +235,7 @@ func NewServerConfiguration(
 				kind = api
 			}
 
-			bodyLimit, err := handler.ParseBodyLimit(endpointConf.RequestBodyLimit)
+			bodyLimit, err := parseBodyLimit(endpointConf.RequestBodyLimit)
 			if err != nil {
 				r := endpointConf.Remain.MissingItemRange()
 				return nil, hcl.Diagnostics{&hcl.Diagnostic{
@@ -259,7 +260,7 @@ func NewServerConfiguration(
 				ReqBufferOpts:  bufferOpts,
 				ServerOpts:     serverOptions,
 			}
-			epHandler := handler.NewEndpoint(epOpts, confCtx, log, proxies, requests, response)
+			epHandler := handler.NewEndpoint(epOpts, log, proxies, requests, response)
 			setACHandlerFn(epHandler)
 
 			err = setRoutesFromHosts(serverConfiguration, serverOptions.ServerErrTpl, defaultPort, srvConf.Hosts, pattern, endpointHandlers[endpointConf], kind)
@@ -281,6 +282,14 @@ func newBackend(
 		return nil, diags
 	}
 
+	if beConf.Name == "" {
+		name, err := getBackendName(evalCtx, backendCtx)
+		if err != nil {
+			return nil, err
+		}
+		beConf.Name = name
+	}
+
 	tc := &transport.Config{
 		BackendName:            beConf.Name,
 		DisableCertValidation:  beConf.DisableCertValidation,
@@ -288,8 +297,7 @@ func newBackend(
 		HTTP2:                  beConf.HTTP2,
 		NoProxyFromEnv:         ignoreProxyEnv,
 		Proxy:                  beConf.Proxy,
-		// TODO: parse timings /w defaults
-		MaxConnections: 0,
+		MaxConnections:         beConf.MaxConnections,
 	}
 
 	if err := parseDuration(beConf.ConnectTimeout, &tc.ConnectTimeout); err != nil {
@@ -309,7 +317,7 @@ func newBackend(
 		return nil, err
 	}
 
-	backend := transport.NewBackend(evalCtx, backendCtx, tc, log, openAPIopts)
+	backend := transport.NewBackend(backendCtx, tc, log, openAPIopts)
 
 	if beConf.OAuth2 != nil {
 		prev, err := newBackend(evalCtx, beConf.OAuth2.Remain, log, ignoreProxyEnv, memStore)
@@ -321,6 +329,23 @@ func newBackend(
 	}
 
 	return backend, nil
+}
+
+func getBackendName(evalCtx *hcl.EvalContext, backendCtx hcl.Body) (string, error) {
+	content, _, _ := backendCtx.PartialContent(&hcl.BodySchema{Attributes: []hcl.AttributeSchema{
+		{Name: "name"}},
+	})
+	if content != nil && len(content.Attributes) > 0 {
+
+		if n, exist := content.Attributes["name"]; exist {
+			v, d := n.Expr.Value(evalCtx)
+			if d.HasErrors() {
+				return "", d
+			}
+			return v.AsString(), nil
+		}
+	}
+	return "", nil
 }
 
 func splitWildcardHostPort(host string, configuredPort int) (string, Port, error) {
@@ -498,4 +523,13 @@ func parseDuration(src string, target *time.Duration) error {
 	}
 	*target = d
 	return nil
+}
+
+func parseBodyLimit(limit string) (int64, error) {
+	const defaultReqBodyLimit = "64MiB"
+	requestBodyLimit := defaultReqBodyLimit
+	if limit != "" {
+		requestBodyLimit = limit
+	}
+	return units.FromHumanSize(requestBodyLimit)
 }

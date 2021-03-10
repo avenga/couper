@@ -1,31 +1,31 @@
 package handler
 
 import (
-	"context"
 	"net/http"
 	"net/http/httputil"
 
 	"github.com/hashicorp/hcl/v2"
 
-	"github.com/avenga/couper/config/request"
 	"github.com/avenga/couper/eval"
 	"github.com/avenga/couper/handler/transport"
 )
+
+// headerBlacklist lists all header keys which will be removed after
+// context variable evaluation to ensure to not pass them upstream.
+var headerBlacklist = []string{"Authorization", "Cookie"}
 
 // Proxy wraps a httputil.ReverseProxy to apply additional configuration context
 // and have control over the roundtrip configuration.
 type Proxy struct {
 	backend      http.RoundTripper
 	context      hcl.Body
-	evalCtx      *hcl.EvalContext
 	reverseProxy *httputil.ReverseProxy
 }
 
-func NewProxy(backend http.RoundTripper, ctx hcl.Body, evalCtx *hcl.EvalContext) *Proxy {
+func NewProxy(backend http.RoundTripper, ctx hcl.Body) *Proxy {
 	proxy := &Proxy{
 		backend: backend,
 		context: ctx,
-		evalCtx: evalCtx,
 	}
 	rp := &httputil.ReverseProxy{
 		Director:  proxy.director,
@@ -41,11 +41,9 @@ func NewProxy(backend http.RoundTripper, ctx hcl.Body, evalCtx *hcl.EvalContext)
 }
 
 func (p *Proxy) RoundTrip(req *http.Request) (*http.Response, error) {
-	if err := eval.ApplyRequestContext(p.evalCtx, p.context, req); err != nil {
+	if err := eval.ApplyRequestContext(req.Context(), p.context, req); err != nil {
 		return nil, err // TODO: log only
 	}
-
-	*req = *req.WithContext(context.WithValue(req.Context(), request.RoundTripProxy, true))
 
 	rec := transport.NewRecorder()
 	p.reverseProxy.ServeHTTP(rec, req)
@@ -53,10 +51,12 @@ func (p *Proxy) RoundTrip(req *http.Request) (*http.Response, error) {
 	if err != nil {
 		return beresp, err
 	}
-	err = eval.ApplyResponseContext(p.evalCtx, p.context, req, beresp) // TODO: log only
+	err = eval.ApplyResponseContext(req.Context(), p.context, beresp) // TODO: log only
 	return beresp, err
 }
 
-func (p *Proxy) director(_ *http.Request) {
-	// noop
+func (p *Proxy) director(req *http.Request) {
+	for _, key := range headerBlacklist {
+		req.Header.Del(key)
+	}
 }

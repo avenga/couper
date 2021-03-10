@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/hashicorp/hcl/v2"
+	"github.com/avenga/couper/config/request"
 )
 
 type Proxy struct {
@@ -15,7 +15,7 @@ type Proxy struct {
 
 type Proxies []*Proxy
 
-func (pr Proxies) Produce(ctx context.Context, clientReq *http.Request, _ *hcl.EvalContext, results chan<- *Result) {
+func (pr Proxies) Produce(ctx context.Context, clientReq *http.Request, results chan<- *Result) {
 	wg := &sync.WaitGroup{}
 	wg.Add(len(pr))
 	go func() {
@@ -25,6 +25,7 @@ func (pr Proxies) Produce(ctx context.Context, clientReq *http.Request, _ *hcl.E
 
 	for _, proxy := range pr {
 		outCtx := withRoundTripName(ctx, proxy.Name)
+		outCtx = context.WithValue(outCtx, request.RoundTripProxy, true)
 		outReq := clientReq.WithContext(outCtx)
 		go roundtrip(proxy.RoundTrip, outReq, results, wg)
 	}
