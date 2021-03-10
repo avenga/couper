@@ -440,6 +440,41 @@ func newBackend(definedBackends Backends, inlineConfig config.Inline) (hcl.Body,
 		return nil, err
 	}
 
+	content, _, diags := bend.PartialContent(&hcl.BodySchema{Blocks: []hcl.BlockHeaderSchema{
+		{Type: "oauth2"},
+	}})
+	if diags.HasErrors() {
+		return nil, diags
+	}
+
+	if oauth2List := content.Blocks.OfType("oauth2"); len(oauth2List) > 0 {
+		ref, err := getBackendReference(definedBackends, oauth2List[0].Body)
+		if err != nil {
+			return nil, err
+		}
+
+		oauth2Content, _, _ := oauth2List[0].Body.PartialContent(&hcl.BodySchema{Attributes: []hcl.AttributeSchema{
+			{Name: "token_endpoint"}},
+		})
+		if diags.HasErrors() {
+			return nil, diags
+		}
+
+		a, _ := oauth2Content.Attributes["token_endpoint"].Expr.Value(nil)
+
+		be, err := newBackendFromURL(a.AsString())
+
+		b := MergeBodies([]hcl.Body{ref, be})
+
+		n := hclbody.New(&hcl.BodyContent{
+			Blocks: hcl.Blocks{
+				{Type: "oauth2", Body: b},
+			},
+		})
+
+		bend = MergeBodies([]hcl.Body{bend, n})
+	}
+
 	if err = validateOrigin(bend); err != nil {
 		r := inlineConfig.HCLBody().MissingItemRange()
 		return nil, hcl.Diagnostics{&hcl.Diagnostic{
